@@ -5,22 +5,48 @@
 // will compile your contracts, add the Hardhat Runtime Environment's members to the
 // global scope, and execute the script.
 const hre = require("hardhat");
+const { ethers } = require("ethers");
+
+async function simulate(contract, ...args) {
+  const gasPrice = await contract.signer.getGasPrice();
+  console.log(`Current gas price: ${gasPrice}`);
+  const estimatedGas = await contract.signer.estimateGas(
+    args.length
+      ? contract.getDeployTransaction(...args)
+      : contract.getDeployTransaction()
+  );
+  console.log(`Estimated gas: ${estimatedGas}`);
+  const deploymentPrice = gasPrice.mul(estimatedGas);
+  const deployerBalance = await contract.signer.getBalance();
+  console.log(
+    `Deployer balance:  ${ethers.utils.formatEther(deployerBalance)}`
+  );
+  console.log(
+    `Deployment price:  ${ethers.utils.formatEther(deploymentPrice)}`
+  );
+  if (Number(deployerBalance) < Number(deploymentPrice)) {
+    throw new Error("You dont have enough balance to deploy.");
+  }
+}
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+  const [deployer] = await hre.ethers.getSigners();
 
-  const lockedAmount = hre.ethers.utils.parseEther("1");
+  console.log("Deploying contracts with the account:", deployer.address);
 
-  const Lock = await hre.ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  const Greeter = await hre.ethers.getContractFactory("Greeter");
+  simulate(Greeter, "Hello, World!");
+  const greeter = await Greeter.deploy("Hello, World!");
 
-  await lock.deployed();
+  const Token = await hre.ethers.getContractFactory("Token");
+  simulate(Token, "Nader Dabit Token", "NDT");
+  const token = await Token.deploy("Nader Dabit Token", "NDT");
 
-  console.log(
-    `Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`
-  );
+  await greeter.deployed();
+  await token.deployed();
+
+  console.log("Greeter deployed to:", greeter.address);
+  console.log("Token deployed to:", token.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
